@@ -1,0 +1,224 @@
+---
+title: "DE3"
+author: "Rodrigo_Hermoza"
+date: "1/31/2024"
+output: html_document
+---
+
+https://www.10xgenomics.com/datasets/8-k-pbm-cs-from-a-healthy-donor-2-standard-2-0-1
+
+10k PBMCs from a Healthy Donor (v3 chemistry)
+
+11,769 cells detected
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("DESeq2")
+BiocManager::install("glmGamPoi", lib = "/Users/rodrigohermoza/Library/R/x86_64/4.3/library")
+```
+
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+library(harmony)
+library(future.apply)
+library(cowplot)
+library(patchwork)
+library("DESeq2")
+library(SeuratData)
+library(SeuratDisk)
+library(SeuratWrappers)
+library(sctransform)
+```
+
+```{r}
+data <- Read10X(data.dir = "/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/rstudio/diferential_expression_2/DE2/filtered_gene_bc_matrices/raw_feature_bc_matrix/")
+
+pbmc <- CreateSeuratObject(counts = data, project = "DE3")
+pbmc <- PercentageFeatureSet(pbmc, pattern = "^MT-", col.name = "percent.mt") 
+pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & percent.mt <15 & nCount_RNA > 50)
+```
+
+```{r}
+pbmc <- NormalizeData(pbmc)
+pbmc <- FindVariableFeatures(pbmc, nfeatures = 3000)
+pbmc <- ScaleData(pbmc, vars.to.regress = "percent.mt")
+#pbmc <- SCTransform(pbmc, vars.to.regress = "percent.mt")
+pbmc <- RunPCA(pbmc)
+```
+
+```{r}
+ElbowPlot(pbmc,ndims = 50) #20
+
+#JackStrawPlot no se puede usar con SCTransform
+pbmc <- JackStraw(pbmc, num.replicate = 200, dims = 40)
+pbmc <- ScoreJackStraw(pbmc, dims = 1:40)
+JackStrawPlot(pbmc, dims = 1:40, reduction = "pca")
+```
+
+```{r}
+plots <- lapply(c("CD4", "CD3E", "CD3D", "CCR7"), function(x) {
+    clustree(pbmc, node_colour = x, node_colour_aggr = "mean",
+             node_size_range = c(6, 20), node_text_size = 4,
+             edge_width = 2.5) +
+    scale_colour_viridis(option = "plasma", begin = 0.3) +
+    guides(size = FALSE,
+           colour = guide_colourbar(title = x,
+                                    barwidth = 2,
+                                    barheight = 30,
+                                    order = 2),
+           edge_colour = FALSE,
+           edge_alpha = FALSE) +
+    theme(legend.title = element_text(size = 20),
+          legend.text = element_text(size = 15))
+})
+legend <- get_legend(plots[[1]] +
+                         guides(size = guide_legend(title = "Cluster size",
+                                                    title.position = "top",
+                                                    title.hjust = 0.5,
+                                                    label.position = "top",
+                                                    label.hjust = 0.5,
+                                                    order = 1),
+                                colour = FALSE,
+                                edge_colour = guide_edge_colourbar(
+                                    title = "Sample count",
+                                    title.position = "top",
+                                    title.hjust = 0.5,
+                                    barwidth = 12,
+                                    draw.ulim = TRUE,
+                                    draw.llim = TRUE,
+                                    order = 3),
+                                edge_alpha = guide_legend(
+                                    title = "In-proportion",
+                                    title.position = "top",
+                                    title.hjust = 0.5,
+                                    label.position = "top",
+                                    label.hjust = 0.5,
+                                    keywidth = 4,
+                                    order = 4)) +
+                         theme(legend.position = "bottom"))
+panel <- plot_grid(plotlist = plots,
+                   labels = c("A - CD4", "B - CD3E", "C - CD3D", "D - CCR7"),
+                   label_size = 30, hjust = -0.1)
+panel_legend <- plot_grid(panel, legend, ncol = 1, rel_heights = c(1, .1))
+
+save_plot(here("figures/figure5_seurat_genes.png"), panel_legend, ncol = 2,
+          base_height = 16, base_aspect_ratio = 0.8)
+save_plot(here("figures/figure5_seurat_genes.pdf"), panel_legend, ncol = 2,
+          base_height = 16, base_aspect_ratio = 0.8)
+
+include_graphics(here("figures/figure5_seurat_genes.png"))
+```
+
+
+```{r}
+pbmc <- FindNeighbors(pbmc, dims = 1:21)
+#, resolution = 1.5
+pbmc <- FindClusters(pbmc, resolution = 1)
+#resolution.range <- seq(from = 0, to = 1.6, by = 0.2)
+#pbmc <- Seurat::FindClusters(object = pbmc, resolution = resolution.range)
+#clustree(pbmc)
+#, n.neighbors = 50
+pbmc <- RunUMAP(pbmc, dims = 1:21)
+DimPlot(pbmc, label = TRUE)
+```
+
+```{r}
+remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
+library(DoubletFinder)
+```
+
+
+```{r}
+sweep_res <- paramSweep(pbmc,PCs = 1:20, sct = FALSE)
+sweep_stat <- summarizeSweep(sweep_res, GT = F)
+bcmv <- find.pK(sweep_stat)
+
+```
+
+```{r}
+ggplot(bcmv, aes(pK, BCmetric, group = 1)) +
+  geom_point()+
+  geom_line()
+
+#0.005
+```
+
+```{r}
+pK<- bcmv %>%
+  filter(BCmetric == max(BCmetric)) %>%
+  select(pK)
+pK<- as.numeric(as.character(pK[[1]]))
+```
+
+```{r}
+annotations <- pbmc@meta.data$seurat_clusters
+homotipic <- modelHomotypic(annotations)
+exp <- round(0.08*nrow(pbmc@meta.data))
+exp.adj <- round(exp*(1-homotipic))
+```
+
+Hay que cambiarle el nombre al group by 
+```{r}
+pbmc <- doubletFinder(pbmc,
+                          PCs = 1:20,
+                          pK = pK,
+                          nExp = exp.adj,
+                          reuse.pANN = F,
+                          sct = F)
+DimPlot(pbmc, reduction = "umap", group.by = "DF.classifications_0.25_0.11_818")
+```
+
+
+```{r}
+table(pbmc@meta.data$DF.classifications_0.25_0.11_818)
+
+# Filtrar las células singlets
+pbmc_filtered <- subset(pbmc, subset = DF.classifications_0.25_0.11_818 == "Singlet")
+```
+
+
+```{r}
+DimPlot(pbmc_filtered, label = TRUE)
+```
+
+
+```{r}
+#logfc.threshold = 0.25
+pbmc.markers <- FindAllMarkers(pbmc_filtered)
+```
+
+
+```{r}
+pbmc.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 5) %>%
+    ungroup() -> top5
+DoHeatmap(pbmc_filtered, features = top5$gene) + NoLegend()
+```
+
+
+Descifrar Markers:
+
+```{r}
+VlnPlot(pbmc_filtered, features = c("CD3E", "CD3D", "ST8SIA4", "CD4", "CD8A", "CD8B", "CCR7", "IL7R"),pt.size = 0.1, ncol = 4,slot = "counts", log = TRUE)
+VlnPlot(pbmc_filtered, features = c("CD3E", "CD3D", "ST8SIA4", "CD4", "CD8A", "CD8B", "CCR7", "IL7R"),pt.size = 0.1, ncol = 4)
+FeaturePlot(pbmc_filtered, features = c("CD3E", "CD3D", "ST8SIA4", "CD4", "CD8A", "CD8B", "CCR7", "IL7R"))
+RidgePlot(object = pbmc_filtered, features = c("CD3E", "CD3D", "ST8SIA4", "CD4", "CD8A", "CD8B", "CCR7", "IL7R"))
+DotPlot(object = pbmc_filtered, features = c("CD3E", "CD3D", "ST8SIA4", "CD4", "CD8A", "CD8B", "CCR7", "IL7R"))
+FeatureScatter(pbmc_filtered, feature1 = "ST8SIA4", feature2 = "RPL5", slot = "data", smooth = T)
+FeatureScatter(pbmc_filtered, feature1 = "ST8SIA4", feature2 = "ATF1", slot = "data", smooth = T)
+FeatureScatter(pbmc_filtered, feature1 = "ST8SIA4", feature2 = "ATF7", slot = "data", smooth = T)
+FeatureScatter(pbmc_filtered, feature1 = "ST8SIA4", feature2 = "BTF3", slot = "data", smooth = T)
+FeatureScatter(pbmc_filtered, feature1 = "ST8SIA4", feature2 = "CCR7", slot = "data", smooth = T)
+```
+
+
+
+
