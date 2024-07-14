@@ -1,0 +1,152 @@
+---
+title: '101'
+author: "Rodrigo_Hermoza"
+date: "2024-03-19"
+output: html_document
+---
+# Single cell RNA seq analysis
+
+This guide only works efficiently in datasets with less than half a million cells. After that, there are better ways to handle the information.
+
+Before actually doing the analysis you have to load the package you are going to use. If you do not have the packages, then you have to first download them and then load them in R
+```{r}
+install.packages("Seurat")
+library(Seurat)
+```
+
+
+Reading and loading the data:
+
+There are various ways to load the data into Rstudio. The first thing to do is to have an object with the path to the data :
+
+```{r}
+#example
+path <- "/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/"
+```
+
+Differnte ways to load the data:
+
+It will highly depend on the data(type of file) 
+```{r}
+data <- Read10X(path)
+data <- ReadMtx(
+    mtx = paste0("/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/", x, "/matrix.mtx.gz"),
+    features = paste0("/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/", x, "/features.tsv.gz"),
+    cells = paste0("/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/", x, "/barcodes.tsv.gz")
+  )
+Read10X_h5(path)
+data <- read.table(path)
+```
+
+Once you have succesfully loaded the data into an object you should create the Seurat Object.
+
+Min.features refers to the minimum amount of genes that a cell should have. The ones that have very low number are usually damaged ones. 
+
+
+
+```{r}
+pbmc <- CreateSeuratObject(data,min.features = 3)
+```
+
+Now that you have a Seurat object you can view the metadata. The metadata is the data that summerise the data that you have. The first column represents the cells. Ncounts represents the number of molecules detect in each cell. Nfeatures represents the number of genes detected.
+
+```{r}
+View(pbmc@metadata)
+```
+
+Quality control:
+
+To filter out the damaged cells you can add a column with the percentage of the mitochondrial RNA:
+
+```{r}
+pbmc <- PercentageFeatureSet(pbmc, pattern = "^MT-", col.name = "percent.mt")
+```
+
+Now that you have the new column you can filter out the low quality cells. Subset is used to filter out according to the requirements, which are less than 200 genes, more than 15% of mitochondrial ARN and less than 50 molecules of ARN detected:
+
+```{r}
+pbmcd <- subset(pbmc, subset = nFeature_RNA > 200 & percent.mt <15 & nCount_RNA > 50)
+```
+
+Normalization and analysis:
+
+There are two main workflows to use here. The standard one and the SCTransform one. SCTransform has a more accurate method of normalization, estimating the variance and identification of genes. The downside is that it takes much more computational power compared to the standard workflow.
+
+SCT: dims, are the dimensions to be used for the correction. Normally more means more clusters and a better variance between the clusters. But it can be straining on the computer or it may over cluster and over differentiate the cells.
+The resolution directly influences the number of clusters
+```{r}
+seurat_filtered <- SCTransform(seurat_filtered, vars.to.regress = "percent.mt")
+seurat_filtered <- RunPCA(seurat_filtered)
+seurat_filtered <- FindNeighbors(seurat_filtered, dims = 1:30)
+seurat_filtered <- FindClusters(seurat_filtered, resolution = 1)
+seurat_filtered <- RunUMAP(seurat_filtered, dims = 1:30)
+DimPlot(seurat_filtered, label = TRUE)
+markers <- FindAllMarkers(seurat_filtered)
+```
+
+Standard workflow:
+NormalizeData works by normalizing the gene expression measurements dor each cell by total expression, multiplies it by a factor(10000) and then log-transforms it.
+
+FindVariableFeatures uses the average expression and disperssion of each gene to then give it a score and find the first 2000 most variable genes.
+
+ScaleData serves the purpose of regressing the signals out of the analysis(batch effect, technical noise, other sources of variation)
+
+RunPCA serves as a dimension reduction tool. It works by maximizing the variance in the proyected dimension.
+
+```{r}
+seurat_filtered <- NormalizeData(seurat_filtered)
+seurat_filtered <- FindVariableFeatures(seurat_filtered)
+seurat_filtered <- ScaleData(seurat_filtered)
+seurat_filtered <- RunPCA(seurat_filtered)
+seurat_filtered <- FindNeighbors(seurat_filtered, dims = 1:30)
+seurat_filtered <- FindClusters(seurat_filtered, resolution = 1)
+seurat_filtered <- RunUMAP(seurat_filtered, dims = 1:30)
+DimPlot(seurat_filtered, label = TRUE)
+```
+
+Now the Various plots:
+
+```{r}
+#Vinplot gives you a ploy with the expression levels of the genes you give it.
+Vinplot(seurat_filtered, features = c("ST8SIA4", "CCR7", "SELL", "CD45"))
+#FeaturePlot gives you the parts(highlighted) where the genes are expressed
+FeaturePlot(seurat_filtered, features = c("ST8SIA4", "CCR7", "SELL", "CD45"))
+#This code gives you a Heatmap with the top 10 marker genes for every cluster.
+markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10
+DoHeatmap(seurat_filtered, features = top10$gene) + NoLegend()
+# It creates a Graph with the percentage of cells expressing the genes and the average expression
+DotPlot(seurat_filtered, features = c("ST8SIA4", "CCR7", "SELL", "CD45"))
+#FeatureScatter gives you a correlation plot(Pearson correlation)
+FeatureScatter(seurat_filtered, feature1 = "ST8SIA4", feature2 = "GPR15")
+```
+
+
+List of objects:
+
+Sometimes, the datasets come with various files; representing each of the patients involved in the study. In those cases we are going to have a list of Seurat objects. The actual creation of the list is going to vary depending on the raw data. But once you have the list, here is the workflow:
+
+```{r}
+#merged_obj <- merge(x = ifnb_list$CTRL, y = ifnb_list$STIM)
+merged_obj <- merge(x = ifnb_list$CTRL, y = c(object1, object2, object3))
+merged_obj <- NormalizeData(merged_obj)
+merged_obj <- FindVariableFeatures(merged_obj)
+merged_obj <- ScaleData(merged_obj)
+merged_obj <- RunPCA(merged_obj)
+merged_obj <- IntegrateLayers(object = obj, method = RPCAIntegration, orig.reduction = "pca", new.reduction = "integrated.rpca",
+    verbose = FALSE)
+
+# now that integration is complete, rejoin layers
+merged_obj[["RNA"]] <- JoinLayers(merged_obj)
+```
+
+
+
+
+
+
+
+
