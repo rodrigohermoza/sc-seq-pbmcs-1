@@ -1,0 +1,732 @@
+---
+title: "covid_2"
+author: "Rodrigo_Hermoza"
+date: "2024-03-08"
+output: html_document
+---
+https://www.nature.com/articles/s41467-022-28505-3#code-availability
+
+30 samples de 12 covid, se repite en el dia 0 de enfermedad y 7. La mitad de los covid murieron. 6 controls :
+
+Healthy:
+38, 39, 40, 41, 42
+Mild:
+32, 33, 34, 35, 36, 37
+Severe:
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 16, 17, 18, 22, 23, 24, 25, 27, 29
+
+
+para eritrocitos HBA, HBB and HBD
+Empecemos:
+
+```{r}
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
+remotes::install_github("mojaveazure/seurat-disk")
+```
+
+
+```{r}
+library(Seurat)
+library(SeuratDisk)
+library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+library(harmony)
+library(future.apply)
+library(cowplot)
+library(patchwork)
+library("DESeq2")
+library(sctransform)
+library(EpicTools)
+library(grr)
+library(Matrix)
+library(factoextra)
+library(ComplexHeatmap)
+library(circlize)
+library(ggpubr)
+library(data.table)
+library(RColorBrewer)
+#library(rowr)
+library(SingleR)
+library(scater)
+#library(nichenetr)
+library(future)
+library(future.apply)
+```
+
+```{r}
+# Lista de archivos en el directorio
+location_files <- list.dirs(path = "/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/", recursive = FALSE, full.names = FALSE)
+
+# Lista para almacenar los objetos Seurat
+seurat_list <- list()
+
+# Leer y crear objetos Seurat
+for (x in location_files) {
+  name <- x
+  
+  # Leer datos
+  mtx_obj <- ReadMtx(
+    mtx = paste0("/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/", x, "/matrix.mtx.gz"),
+    features = paste0("/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/", x, "/features.tsv.gz"),
+    cells = paste0("/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/COVID/GSE192391_RAW/", x, "/barcodes.tsv.gz")
+  )
+  
+  # Crear objeto Seurat
+  seurat_obj <- CreateSeuratObject(counts = mtx_obj)
+  
+  # Agregar columna con el nombre del objeto Seurat
+  seurat_obj$sample <- name
+  
+  # Almacenar objeto Seurat en la lista
+  seurat_list[[name]] <- seurat_obj
+}
+
+```
+
+Comenzamos con el analisis utilizando la lista, luego la uniremos
+```{r}
+for (i in 1:length(seurat_list)) {
+  seurat_list[[i]] <- PercentageFeatureSet(seurat_list[[i]], pattern = "^MT-", col.name = "percent.mt") 
+  seurat_list[[i]] <- subset(seurat_list[[i]], subset = nFeature_RNA > 200 & percent.mt <15 & nCount_RNA > 50)
+}
+```
+
+Merger
+```{r}
+merger <- merge(seurat_list[[1]], list(seurat_list[[2]], seurat_list[[3]], seurat_list[[4]], seurat_list[[5]], seurat_list[[6]], seurat_list[[7]], seurat_list[[8]], seurat_list[[9]], seurat_list[[10]], seurat_list[[11]], seurat_list[[12]], seurat_list[[13]], seurat_list[[14]], seurat_list[[15]], seurat_list[[16]], seurat_list[[17]], seurat_list[[18]], seurat_list[[19]], seurat_list[[20]], seurat_list[[21]], seurat_list[[22]], seurat_list[[23]], seurat_list[[24]], seurat_list[[25]], seurat_list[[26]], seurat_list[[27]], seurat_list[[28]], seurat_list[[29]], seurat_list[[30]])) 
+```
+
+Al parecer el nuevo SCT puede usarse en un merger solo que tiene que dividirse los layers. f en el split es la forma de agrupación por la que se dividirán las layers. Pero eso solo se tiene que hacer cuando el objeto viene junto. Como los uni con merge, ya viene con layers.
+
+```{r}
+obj <-SCTransform(merger,vars.to.regress = "percent.mt")
+```
+
+```{r}
+obj <- RunPCA(obj)
+
+```
+
+#Integration
+
+```{r}
+obj<- IntegrateLayers(object = obj, method = HarmonyIntegration, orig.reduction = "pca", assay = "SCT")
+obj <- FindNeighbors(obj, dims = 1:30)
+obj <- FindClusters(obj, resolution = 1)
+
+```
+
+```{r}
+obj <- RunUMAP(obj, dims = 1:30)
+DimPlot(obj, label = TRUE)
+markers <- FindAllMarkers(obj)
+```
+# Identificando a los celltypes con Single R
+```{r}
+ref1 <- HumanPrimaryCellAtlasData()
+ref2 <- DatabaseImmuneCellExpressionData()
+View(as.data.frame(colData(ref2)))
+
+ref1$label.main <- paste0("HPCA", ref1$label.main)
+ref2$label.main <- paste0("DICE", ref2$label.main)
+
+share <- intersect(rownames(ref1), rownames(ref2))
+combi <- cbind(ref1[share,], ref2[share,])
+```
+El ref$label.main indica la rigurosidad y definición que usa R, como usamos Markers elegidos a mano, esta bien para el general pero para específico elegimos a manopla
+```{r}
+numb <- GetAssayData(obj, slot = "counts")
+prediction <- SingleR(test = numb, ref = combi, labels = combi$label.main)
+
+table(prediction$labels)
+```
+Asignar
+```{r}
+obj$singleR.labels <- prediction$labels[match(rownames(obj@meta.data), rownames(prediction))]
+
+obj$singleR2.labels <- prediction[match(rownames(obj@meta.data), rownames(prediction)), "labels"]
+
+
+```
+
+```{r}
+DimPlot(obj, group.by = "singleR2.labels")
+DimPlot(obj, group.by = "singleR.labels")
+```
+Scores de las predicciones
+```{r}
+plotScoreHeatmap(prediction)
+```
+
+```{r}
+plotDeltaDistribution(prediction)
+```
+
+Primero que nada vamos a dividir a los pacientes en muerto y vivos, ID y el dia de sampleado.
+
+```{r}
+obj@meta.data <- separate(obj@meta.data, col = "sample", into = c("Status", "ID", "Day"), sep = "-")
+```
+
+
+Vamos a empezar a dividir a los grupos
+```{r}
+rm(mtx_obj)
+rm(seurat_obj)
+rm(seurat_list)
+Idents(obj) <- "singleR.labels"
+T_cells <- subset(obj, idents = "T_cells")
+Mono <- subset(obj, idents = "Monocyte")
+B_cells <- subset(obj, idents = "B_cell")
+DC <- subset(obj, idents = "DC")
+NK <- subset(obj, idents = "NK_cell")
+Platelets <- subset(obj, idents = "Platelets")
+```
+
+Identificar los celltypes
+
+```{r}
+DotPlot(T_cells, features = c("CD4", "PRF1", "GZMB", "GZMA", "CD8A", "RORC", "EOMES", "TBX21" ), group.by = "seurat_clusters")
+```
+
+```{r}
+Idents(obj) <- "Status"
+FeaturePlot(subset(obj, idents = "Alive"), features = "ST8SIA4")
+FeaturePlot(subset(obj, idents = "Dead"), features = "ST8SIA4")
+FeaturePlot(subset(obj, idents = "Control"), features = "ST8SIA4")
+Idents(Mono) <- "Status"
+FeaturePlot(subset(Mono, idents = "Alive"), features = "ST8SIA4")
+FeaturePlot(subset(Mono, idents = "Dead"), features = "ST8SIA4")
+FeaturePlot(subset(Mono, idents = "Control"), features = "ST8SIA4")
+Idents(T_cells) <- "Status"
+FeaturePlot(subset(T_cells, idents = "Alive"), features = "ST8SIA4")
+FeaturePlot(subset(T_cells, idents = "Dead"), features = "ST8SIA4")
+FeaturePlot(subset(T_cells, idents = "Control"), features = "ST8SIA4")
+```
+
+Main HPCA
+```{r}
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "HPCAT_cells"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "HPCANK_cell"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "HPCAMonocyte"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "HPCAB_cell"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "HPCAPlatelets"))
+
+```
+Main DICE
+
+```{r}
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "DICET cells, CD4+"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "DICET cells, CD8+"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "DICENK cells"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "DICEMonocytes"))
+
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR2.labels == "DICEB cells"))
+```
+
+Main original
+```{r}
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR.labels == "T_cells"))
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR.labels == "Monocyte"))
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR.labels == "B_cell"))
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR.labels == "NK_cell"))
+DimPlot(obj, 
+  cells.highlight = WhichCells(object = obj, expression = singleR.labels == "Platelets"))
+```
+
+Comenzamos con el clustering de T_Cells
+
+Encontre una buena forma de hacer el re clustering. No seguir el de seurat ya que no parece funcionar adecuadamente. Link del issue de GitHub y es el último comentario: https://github.com/satijalab/seurat/issues/1883
+
+Reclustering:
+Para el reclustering vamos a usar el workflow de seurat que usan en casos de dataset muy grandes. Se supone que minimiza todos los downsides de antes pero por lo que entiendo solo existe para el standard workflow.
+
+
+Intente con SCTransform pero no puedo, session aborta Intentare con el otro metodo
+
+
+```{r}
+#Reiniciamos la sección de RNA de nuestro dataset, apra que podeamos realizar los analaisis sin tener la influencia del pasado analisis.
+
+DefaultAssay(T_cells) <- "RNA"
+#Ahora tenemos que partir el objeto para volver a realizar el analisis
+T_cells$ID_Day <- interaction(T_cells$ID, T_cells$Day)
+lista_t <- SplitObject(T_cells, split.by = "ID_Day")
+
+#Ahora que tenemos la lista, podremos seguir el metodo que se muestra en el link superior
+
+lista_t <- lapply(lista_t, SCTransform, vars.to.regress = "percent.mt")
+features  <- SelectIntegrationFeatures(lista_t, nfeatures = 3000)
+lista_t <- PrepSCTIntegration(lista_t, anchor.features = features)
+anchors <- FindIntegrationAnchors(lista_t, normalization.method = "SCT", anchor.features = features)
+t_combi <- IntegrateData(anchorset = anchors, normalization.method = "SCT")
+t_combi <- RunPCA(t_combi)
+t_combi <- RunUMAP(t_combi, reduction = "pca", dims = 1:15)
+t_combi <- FindNeighbors(t_combi, dims = 1:15)
+t_combi <- FindClusters(t_combi, dims = 1:15)
+DimPlot(t_combi)
+```
+
+Intento con normalize
+```{r}
+DefaultAssay(T_cells) <- "RNA"
+lista_t <- SplitObject(T_cells, split.by = "ID_Day")
+lista_t <- lapply(X = lista_t, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+features <- SelectIntegrationFeatures(object.list = lista_t)
+anchors <- FindIntegrationAnchors(object.list = lista_t, anchor.features = features)
+
+# set k.weight so that it is not larger than the number of cells in the smallest dataset
+# https://github.com/satijalab/seurat/issues/3936
+t_combi <- IntegrateData(anchorset = anchors, k.weight = 501)
+DefaultAssay(t_combi) <- "integrated"
+
+t_combi <- ScaleData(t_combi, vars.to.regress = "percent.mt", verbose = FALSE)
+t_combi <- RunPCA(t_combi, npcs = 30, verbose = FALSE)
+t_combi <- RunUMAP(t_combi, reduction = "pca", dims = 1:10)
+t_combi <- FindNeighbors(t_combi, reduction = "pca", dims = 1:10)
+t_combi <- FindClusters(t_combi, resolution = 0.5)
+```
+
+Metodo con Layers
+Trabajar a 1:10 dimensiones y 0.6 de resolución da 21 clusters. Parece trabajable. Voy a intentar con algo menos. A resolución de 1 llega a 30 clusters. Voy a intentar ahora con dimensiones de 1:20.
+
+```{r}
+#Se recomienda eliminar data del downstream ya que puede afecta la capacidad computacional del analisis
+rm(Alive_F, Alive_S, Dead_F, Dead_S, Controls, CMcd4, CMcd8, EMcd4, EMcd8, Mono_a_1, Mono_a_2, Mono_control, Mono_d_1, Mono_d_2, NK_a_1, NK_a_2, NK_d_1, NK_d_2, NK_control, top20, Treg, UK, Naive4, Naive8, combi_markers, Mono, NK, combi, numb)
+```
+
+
+```{r}
+DefaultAssay(T_cells) <- "RNA"
+#T_cells[["RNA"]] <- split(T_cells[["RNA"]], f = T_cells$ID_Day)
+t_combi <- SCTransform(T_cells)
+#termino, todo bien 
+t_combi <- IntegrateLayers(object = t_combi, method = HarmonyIntegration)
+t_combi <- RunPCA(t_combi)
+t_combi <- RunUMAP(t_combi, dims = 1:20)
+t_combi <- FindNeighbors(t_combi, dims = 1:20)
+t_combi <- FindClusters(t_combi, resolution = 1)
+DimPlot(t_combi, reduction = "umap")
+
+combi_markers <- FindAllMarkers(t_combi, recorrect_umi=FALSE)
+combi_markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 20) %>%
+    ungroup() -> top20
+DoHeatmap(t_combi, features = top20$gene) + NoLegend()
+DimPlot(t_combi, reduction = "umap", label = T)
+```
+
+Vamos a comenzar el DE para identificar los SUBGRUPOS:
+
+```{r}
+VlnPlot(t_combi, features = c("SELL", "LEF1", "CCR7", "IL7R", "CD4", "CD8B", "CD8A", "ISG20"),pt.size = 0.1, ncol = 4,slot = "data", log = TRUE)
+```
+Vamos a asignar los marcadores. Este método esta mal, no es robusta y tiene muchos errors por lo que se puede usar una vez y nada más.
+
+```{r}
+new.cluster.ids <- c("Naive CD4", "Treg", "Naive CD4", "EM CD8", "Naive CD4", "EM CD8", "EM CD8", "Treg", "Naive CD4", "CM CD8", "EM CD4", "EM CD8", "UK", "EM CD4", "EM CD4", "EM CD4", "EM CD4", "EM CD8", "UK", "CM CD4", "EM CD8", "UK")
+
+names(new.cluster.ids) <- levels(t_combi)
+t_combi <- RenameIdents(t_combi, new.cluster.ids)
+DimPlot(t_combi, label = TRUE) 
+DimPlot(t_combi, label = TRUE, group.by = "seurat_clusters")
+```
+
+Esta versión funciona pero no permite tener numeros afuera de la palabra
+```{r}
+# Mapeo de clusters a cell types
+cluster_mapping <- c(
+  "Naive4." = c(3, 5, 7, 18, 21, 22, 28, 30),
+  "Naive8." = c(11, 14),
+  "Treg" = c(8, 13, 15, 24),
+  "EM8." = c(0, 2, 4, 26, 27, 31, 32),
+  "CM8." = c(9, 19, 23, 29, 33),
+  "EM4." = c(1, 17),
+  "CM4." = c(6, 10, 16, 25),
+  "UK" = c(12, 20, 34)
+)
+
+# Función para asignar cell types a clusters
+assign_cell_types <- function(cluster) {
+  for (cell_type in names(cluster_mapping)) {
+    if (cluster %in% cluster_mapping[[cell_type]]) {
+      return(cell_type)
+    }
+  }
+  return(NA)  # Devuelve NA si el cluster no tiene un cell type asignado
+}
+
+# Aplicar la función a la columna seurat_clusters
+t_combi@meta.data$new.cluster.ids <- sapply(t_combi@meta.data$seurat_clusters, assign_cell_types)
+
+# Eliminar el número al final de los nombres de los cell types
+t_combi@meta.data$new.cluster.ids <- gsub("\\d+$", "", t_combi@meta.data$new.cluster.ids)
+View(t_combi@meta.data)
+DimPlot(t_combi, reduction = "umap", label = T)
+pdf("Clusters-ids.pdf")
+DimPlot(t_combi, reduction = "umap", label = T, group.by = "new.cluster.ids")
+dev.off()
+```
+
+Average
+```{r}
+Idents(t_combi) <- "Status"
+
+Controls<-subset(t_combi, idents = "Control")
+
+Alive_S<- subset(t_combi, subset = Status == "Alive" & Day == 0)
+Alive_F<-subset(t_combi, subset = Status == "Alive" & Day == 7)
+
+Dead_S<-subset(t_combi, subset = Status == "Dead" & Day == 0)
+Dead_F<-subset(t_combi, subset = Status == "Dead" & Day == 7)
+```
+
+Controls
+```{r}
+Naive4 <- AverageExpression(subset(Controls, subset = new.cluster.ids == "Naive4."), features = "ST8SIA4", slot = "data")
+Naive8 <- AverageExpression(subset(Controls, subset = new.cluster.ids == "Naive8."), features = "ST8SIA4", slot = "data")
+Treg<-AverageExpression(subset(Controls, subset = new.cluster.ids == "Treg"), features = "ST8SIA4", slot = "data")
+EMcd8<-AverageExpression(subset(Controls, subset = new.cluster.ids == "EM8."), features = "ST8SIA4", slot = "data")
+EMcd4<-AverageExpression(subset(Controls, subset = new.cluster.ids == "EM4."), features = "ST8SIA4", slot = "data")
+CMcd8<-AverageExpression(subset(Controls, subset = new.cluster.ids == "CM8."), features = "ST8SIA4", slot = "data")
+CMcd4<-AverageExpression(subset(Controls, subset = new.cluster.ids == "CM4."), features = "ST8SIA4", slot = "data")
+UK<-AverageExpression(subset(Controls, subset = new.cluster.ids == "UK"), features = "ST8SIA4", slot = "data")
+
+# Vector con los valores de expresión promedio
+avg_expression <- c(Naive4$SCT, CMcd4$SCT, EMcd4$SCT, Treg$SCT, Naive8$SCT, CMcd8$SCT, EMcd8$SCT,  UK$SCT)
+
+# Nombres de los tipos de células
+cell_types <- c("Naive4", "CMcd4", "EMcd4", "Treg", "Naive8", "CMcd8", "EMcd8", "UK")
+
+# Colores 
+#bar_colors <- c("blue", "blue", "green", "green", "green", "green", "green", "green")
+
+library(RColorBrewer)
+palette1 <- brewer.pal(2, "Blues")  
+palette2 <- brewer.pal(6, "YlOrRd")  
+bar_colors <- c(palette1[1:2], palette2)
+# Crear el gráfico de barras
+#barplot(avg_expression, names.arg = cell_types, col = bar_colors,
+        #main = "Average Expression per celltype(ST8SIA4) on Healthy 
+# Para CD4
+pdf("Controls-CD4.pdf")
+barplot(avg_expression[1:4], names.arg = cell_types[1:4], col = palette1,
+        main = "Average Expression of CD4 Cell Types (ST8SIA4) on Healthy people",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+# Para CD8
+pdf("Controls-CD8.pdf")
+barplot(avg_expression[5:8], names.arg = cell_types[5:8], col = palette2,
+        main = "Average Expression of CD8 Cell Types (ST8SIA4) on Healthy people",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+```
+
+Alive_S
+```{r}
+Naive4 <- AverageExpression(subset(Alive_S, subset = new.cluster.ids == "Naive4."), features = "ST8SIA4", slot = "data")
+Naive8 <- AverageExpression(subset(Alive_S, subset = new.cluster.ids == "Naive8."), features = "ST8SIA4", slot = "data")
+Treg<-AverageExpression(subset(Alive_S, subset = new.cluster.ids == "Treg"), features = "ST8SIA4", slot = "data")
+EMcd8<-AverageExpression(subset(Alive_S, subset = new.cluster.ids == "EM8."), features = "ST8SIA4", slot = "data")
+EMcd4<-AverageExpression(subset(Alive_S, subset = new.cluster.ids == "EM4."), features = "ST8SIA4", slot = "data")
+CMcd8<-AverageExpression(subset(Alive_S, subset = new.cluster.ids == "CM8."), features = "ST8SIA4", slot = "data")
+CMcd4<-AverageExpression(subset(Alive_S, subset = new.cluster.ids == "CM4."), features = "ST8SIA4", slot = "data")
+UK<-AverageExpression(subset(Alive_S, subset = new.cluster.ids == "UK"), features = "ST8SIA4", slot = "data")
+
+# Vector con los valores de expresión promedio
+avg_expression <- c(Naive4$SCT, CMcd4$SCT, EMcd4$SCT, Treg$SCT, Naive8$SCT, CMcd8$SCT, EMcd8$SCT,  UK$SCT)
+
+# Nombres de los tipos de células
+cell_types <- c("Naive4", "CMcd4", "EMcd4", "Treg", "Naive8", "CMcd8", "EMcd8", "UK")
+
+# Colores para las barras
+palette1 <- brewer.pal(2, "BuPu")  
+palette2 <- brewer.pal(6, "YlOrRd")  
+bar_colors <- c(palette1[1:2], palette2)
+
+# Crear el gráfico de barras
+#par(mfrow=c(1,2))  # Divide el área de la trama en dos columnas
+
+# Para CD4
+pdf("Alive_1-CD4.pdf")
+barplot(avg_expression[1:4], names.arg = cell_types[1:4], col = palette1,
+        main = "Average Expression of CD4 Cell Types (ST8SIA4) on Covid-Day1",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+# Para CD8
+pdf("Alive_1-CD8.pdf")
+barplot(avg_expression[5:8], names.arg = cell_types[5:8], col = palette2,
+        main = "Average Expression of CD8 Cell Types (ST8SIA4)on Covid-Day1",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+```
+
+Alive_F
+```{r}
+Naive4 <- AverageExpression(subset(Alive_F, subset = new.cluster.ids == "Naive4."), features = "ST8SIA4", slot = "data")
+Naive8 <- AverageExpression(subset(Alive_F, subset = new.cluster.ids == "Naive8."), features = "ST8SIA4", slot = "data")
+Treg<-AverageExpression(subset(Alive_F, subset = new.cluster.ids == "Treg"), features = "ST8SIA4", slot = "data")
+EMcd8<-AverageExpression(subset(Alive_F, subset = new.cluster.ids == "EM8."), features = "ST8SIA4", slot = "data")
+EMcd4<-AverageExpression(subset(Alive_F, subset = new.cluster.ids == "EM4."), features = "ST8SIA4", slot = "data")
+CMcd8<-AverageExpression(subset(Alive_F, subset = new.cluster.ids == "CM8."), features = "ST8SIA4", slot = "data")
+CMcd4<-AverageExpression(subset(Alive_F, subset = new.cluster.ids == "CM4."), features = "ST8SIA4", slot = "data")
+UK<-AverageExpression(subset(Alive_F, subset = new.cluster.ids == "UK"), features = "ST8SIA4", slot = "data")
+
+# Vector con los valores de expresión promedio
+avg_expression <- c(Naive4$SCT, CMcd4$SCT, EMcd4$SCT, Treg$SCT, Naive8$SCT, CMcd8$SCT, EMcd8$SCT,  UK$SCT)
+
+# Nombres de los tipos de células
+cell_types <- c("Naive4", "CMcd4", "EMcd4", "Treg", "Naive8", "CMcd8", "EMcd8", "UK")
+
+# Colores para las barras
+palette1 <- brewer.pal(2, "BuPu")  
+palette2 <- brewer.pal(6, "YlOrRd")  
+bar_colors <- c(palette1[1:2], palette2)
+
+# Crear el gráfico de barras
+#par(mfrow=c(1,2))  # Divide el área de la trama en dos columnas
+
+# Para CD4
+pdf("Alive_7-CD4.pdf")
+barplot(avg_expression[1:4], names.arg = cell_types[1:4], col = palette1,
+        main = "Average Expression of CD4 Cell Types (ST8SIA4) on Covid-Day7",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+# Para CD8
+pdf("Alive_7-CD8.pdf")
+barplot(avg_expression[5:8], names.arg = cell_types[5:8], col = palette2,
+        main = "Average Expression of CD8 Cell Types (ST8SIA4) on Covid-Day7",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+```
+
+Dead_S
+```{r}
+Naive4 <- AverageExpression(subset(Dead_S, subset = new.cluster.ids == "Naive4."), features = "ST8SIA4", slot = "data")
+Naive8 <- AverageExpression(subset(Dead_S, subset = new.cluster.ids == "Naive8."), features = "ST8SIA4", slot = "data")
+Treg<-AverageExpression(subset(Dead_S, subset = new.cluster.ids == "Treg"), features = "ST8SIA4", slot = "data")
+EMcd8<-AverageExpression(subset(Dead_S, subset = new.cluster.ids == "EM8."), features = "ST8SIA4", slot = "data")
+EMcd4<-AverageExpression(subset(Dead_S, subset = new.cluster.ids == "EM4."), features = "ST8SIA4", slot = "data")
+CMcd8<-AverageExpression(subset(Dead_S, subset = new.cluster.ids == "CM8."), features = "ST8SIA4", slot = "data")
+CMcd4<-AverageExpression(subset(Dead_S, subset = new.cluster.ids == "CM4."), features = "ST8SIA4", slot = "data")
+UK<-AverageExpression(subset(Dead_S, subset = new.cluster.ids == "UK"), features = "ST8SIA4", slot = "data")
+
+# Vector con los valores de expresión promedio
+avg_expression <- c(Naive4$SCT, CMcd4$SCT, EMcd4$SCT, Treg$SCT, Naive8$SCT, CMcd8$SCT, EMcd8$SCT,  UK$SCT)
+
+# Nombres de los tipos de células
+cell_types <- c("Naive4", "CMcd4", "EMcd4", "Treg", "Naive8", "CMcd8", "EMcd8", "UK")
+
+# Colores para las barras
+palette1 <- brewer.pal(2, "BuPu")  
+palette2 <- brewer.pal(6, "YlOrRd")  
+bar_colors <- c(palette1[1:2], palette2)
+
+# Crear el gráfico de barras
+#par(mfrow=c(1,2))  # Divide el área de la trama en dos columnas
+
+# Para CD4
+pdf("Dead_1-CD4.pdf")
+barplot(avg_expression[1:4], names.arg = cell_types[1:4], col = palette1,
+        main = "Average Expression of CD4 Cell Types (ST8SIA4) on Deceased-Day1",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+# Para CD8
+pdf("Dead_1-CD8.pdf")
+barplot(avg_expression[5:8], names.arg = cell_types[5:8], col = palette2,
+        main = "Average Expression of CD8 Cell Types (ST8SIA4) on Deceased-Day1",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+```
+
+Dead_F
+```{r}
+Naive4 <- AverageExpression(subset(Dead_F, subset = new.cluster.ids == "Naive4."), features = "ST8SIA4", slot = "data")
+Naive8 <- AverageExpression(subset(Dead_F, subset = new.cluster.ids == "Naive8."), features = "ST8SIA4", slot = "data")
+Treg<-AverageExpression(subset(Dead_F, subset = new.cluster.ids == "Treg"), features = "ST8SIA4", slot = "data")
+EMcd8<-AverageExpression(subset(Dead_F, subset = new.cluster.ids == "EM8."), features = "ST8SIA4", slot = "data")
+EMcd4<-AverageExpression(subset(Dead_F, subset = new.cluster.ids == "EM4."), features = "ST8SIA4", slot = "data")
+CMcd8<-AverageExpression(subset(Dead_F, subset = new.cluster.ids == "CM8."), features = "ST8SIA4", slot = "data")
+CMcd4<-AverageExpression(subset(Dead_F, subset = new.cluster.ids == "CM4."), features = "ST8SIA4", slot = "data")
+UK<-AverageExpression(subset(Dead_F, subset = new.cluster.ids == "UK"), features = "ST8SIA4", slot = "data")
+
+# Vector con los valores de expresión promedio
+avg_expression <- c(Naive4$SCT, CMcd4$SCT, EMcd4$SCT, Treg$SCT, Naive8$SCT, CMcd8$SCT, EMcd8$SCT,  UK$SCT)
+
+# Nombres de los tipos de células
+cell_types <- c("Naive4", "CMcd4", "EMcd4", "Treg", "Naive8", "CMcd8", "EMcd8", "UK")
+
+# Colores para las barras
+palette1 <- brewer.pal(2, "BuPu")  
+palette2 <- brewer.pal(6, "YlOrRd")  
+bar_colors <- c(palette1[1:2], palette2)
+
+# Crear el gráfico de barras
+#par(mfrow=c(1,2))  # Divide el área de la trama en dos columnas
+
+# Para CD4
+pdf("Dead_7-CD4.pdf")
+barplot(avg_expression[1:4], names.arg = cell_types[1:4], col = palette1,
+        main = "Average Expression of CD4 Cell Types (ST8SIA4) on Deceased-Day7",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+# Para CD8
+pdf("Dead_7-CD8.pdf")
+barplot(avg_expression[5:8], names.arg = cell_types[5:8], col = palette2,
+        main = "Average Expression of CD8 Cell Types (ST8SIA4) on Deceased-Day7",
+        xlab = "Cell Type", ylab = "Average Expression")
+dev.off()
+```
+
+Vamos a ver con monocytes y NK
+```{r}
+Mono_control <- AverageExpression(subset(Mono, subset = Status == "Control"), features = "ST8SIA4", slot = "data")
+Mono_a_1 <- AverageExpression(subset(Mono, subset = Status == "Alive" & Day == 0), features = "ST8SIA4", slot = "data")
+Mono_a_2 <- AverageExpression(subset(Mono, subset = Status == "Alive" & Day == 07), features = "ST8SIA4", slot = "data")
+Mono_d_1 <- AverageExpression(subset(Mono, subset = Status == "Dead" & Day == 0), features = "ST8SIA4", slot = "data")
+Mono_d_2 <- AverageExpression(subset(Mono, subset = Status == "Dead" & Day == 7), features = "ST8SIA4", slot = "data")
+```
+
+```{r}
+# Vector con los valores de expresión promedio
+avg_expression <- c(Mono_control$SCT, Mono_a_1$SCT, Mono_a_2$SCT, Mono_d_1$SCT, Mono_d_2$SCT)
+
+# Nombres de las condiciones
+conditions <- c("Control", "Alive (Day 0)", "Alive (Day 7)", "Dead (Day 0)", "Dead (Day 7)")
+
+# Colores para las barras
+bar_colors <- brewer.pal(5, "Pastel1")
+#bar_colors <- c("blue", "green", "orange", "red", "purple")
+
+# Crear el gráfico de barras
+pdf("mono.pdf")
+barplot(avg_expression, names.arg = conditions, col = bar_colors,
+        main = "Average expression of ST8SIA4 per status in Monocytes",
+        xlab = "Status", ylab = "Average expression")
+dev.off()
+```
+
+```{r}
+NK_control <- AverageExpression(subset(NK, subset = Status == "Control"), features = "ST8SIA4", slot = "data")
+NK_a_1 <- AverageExpression(subset(NK, subset = Status == "Alive" & Day == 0), features = "ST8SIA4", slot = "data")
+NK_a_2 <- AverageExpression(subset(NK, subset = Status == "Alive" & Day == 07), features = "ST8SIA4", slot = "data")
+NK_d_1 <- AverageExpression(subset(NK, subset = Status == "Dead" & Day == 0), features = "ST8SIA4", slot = "data")
+NK_d_2 <- AverageExpression(subset(NK, subset = Status == "Dead" & Day == 7), features = "ST8SIA4", slot = "data")
+```
+
+```{r}
+# Vector con los valores de expresión promedio
+avg_expression <- c(NK_control$SCT, NK_a_1$SCT, NK_a_2$SCT, NK_d_1$SCT, NK_d_2$SCT)
+
+# Nombres de las condiciones
+conditions <- c("Control", "Alive (Day 0)", "Alive (Day 7)", "Dead (Day 0)", "Dead (Day 7)")
+
+# Colores para las barras
+#bar_colors <- c("blue", "green", "orange", "red", "purple")
+bar_colors <- brewer.pal(5, "Pastel1")
+# Crear el gráfico de barras
+pdf("NK.pdf")
+barplot(avg_expression, names.arg = conditions, col = bar_colors,
+        main = "Average expression of ST8SIA4 per status in NK cells",
+        xlab = "Status", ylab = "Average expression")
+dev.off()
+```
+
+Ahora una tabla con los valores:
+
+Para que se puedan replicar estos valores es necesario pasalo de la siguiente forma, ya que estan normalizados:
+
+mean(expm1(valor))
+
+Controls
+```{r}
+# Guardar el data frame como CSV
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "Naive4."), vars = "ST8SIA4"), file = "Controls_Naive4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "Naive8."), vars = "ST8SIA4"), file = "Controls_Naive8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "CM4."), vars = "ST8SIA4"), file = "Controls_CM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "CM8."), vars = "ST8SIA4"), file = "Controls_CM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "EM4."), vars = "ST8SIA4"), file = "Controls_EM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "EM8."), vars = "ST8SIA4"), file = "Controls_EM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "Treg"), vars = "ST8SIA4"), file = "Controls_Treg.csv", row.names = FALSE)
+write.csv(FetchData(subset(Controls, subset = new.cluster.ids == "UK"), vars = "ST8SIA4"), file = "Controls_UK.csv", row.names = FALSE)
+
+```
+
+Alive_S
+```{r}
+# Guardar el data frame como CSV
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "Naive4."), vars = "ST8SIA4"), file = "Alive_S_Naive4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "Naive8."), vars = "ST8SIA4"), file = "Alive_S_Naive8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "CM4."), vars = "ST8SIA4"), file = "Alive_S_CM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "CM8."), vars = "ST8SIA4"), file = "Alive_S_CM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "EM4."), vars = "ST8SIA4"), file = "Alive_S_EM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "EM8."), vars = "ST8SIA4"), file = "Alive_S_EM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "Treg"), vars = "ST8SIA4"), file = "Alive_S_Treg.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_S, subset = new.cluster.ids == "UK"), vars = "ST8SIA4"), file = "Alive_S_UK.csv", row.names = FALSE)
+
+```
+
+Alive_F
+```{r}
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "Naive4."), vars = "ST8SIA4"), file = "Alive_F_Naive4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "Naive8."), vars = "ST8SIA4"), file = "Alive_F_Naive8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "CM4."), vars = "ST8SIA4"), file = "Alive_F_CM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "CM8."), vars = "ST8SIA4"), file = "Alive_F_CM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "EM4."), vars = "ST8SIA4"), file = "Alive_F_EM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "EM8."), vars = "ST8SIA4"), file = "Alive_F_EM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "Treg"), vars = "ST8SIA4"), file = "Alive_F_Treg.csv", row.names = FALSE)
+write.csv(FetchData(subset(Alive_F, subset = new.cluster.ids == "UK"), vars = "ST8SIA4"), file = "Alive_F_UK.csv", row.names = FALSE)
+```
+
+Dead_S
+```{r}
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "Naive4."), vars = "ST8SIA4"), file = "Dead_S_Naive4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "Naive8."), vars = "ST8SIA4"), file = "Dead_S_Naive8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "CM4."), vars = "ST8SIA4"), file = "Dead_S_CM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "CM8."), vars = "ST8SIA4"), file = "Dead_S_CM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "EM4."), vars = "ST8SIA4"), file = "Dead_S_EM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "EM8."), vars = "ST8SIA4"), file = "Dead_S_EM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "Treg"), vars = "ST8SIA4"), file = "Dead_S_Treg.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_S, subset = new.cluster.ids == "UK"), vars = "ST8SIA4"), file = "Dead_S_UK.csv", row.names = FALSE)
+```
+Dead_F
+```{r}
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "Naive4."), vars = "ST8SIA4"), file = "Dead_F_Naive4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "Naive8."), vars = "ST8SIA4"), file = "Dead_F_Naive8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "CM4."), vars = "ST8SIA4"), file = "Dead_F_CM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "CM8."), vars = "ST8SIA4"), file = "Dead_F_CM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "EM4."), vars = "ST8SIA4"), file = "Dead_F_EM4.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "EM8."), vars = "ST8SIA4"), file = "Dead_F_EM8.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "Treg"), vars = "ST8SIA4"), file = "Dead_F_Treg.csv", row.names = FALSE)
+write.csv(FetchData(subset(Dead_F, subset = new.cluster.ids == "UK"), vars = "ST8SIA4"), file = "Dead_F_UK.csv", row.names = FALSE)
+```
+
