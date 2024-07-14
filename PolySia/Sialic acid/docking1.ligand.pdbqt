@@ -1,0 +1,118 @@
+REMARK  20 active torsions:
+REMARK  status: ('A' for Active; 'I' for Inactive)
+REMARK    1  A    between atoms: C1_1  and  C2_4 
+REMARK    2  A    between atoms: C2_4  and  O2_5 
+REMARK    3  A    between atoms: C4_7  and  O4_8 
+REMARK    4  A    between atoms: C5_9  and  N5_10 
+REMARK       I    between atoms: C10_19  and  N5_10 
+REMARK    5  A    between atoms: C6_11  and  C7_13 
+REMARK    6  A    between atoms: C7_13  and  O7_14 
+REMARK    7  A    between atoms: C7_13  and  C8_15 
+REMARK    8  A    between atoms: C8_15  and  O8_16 
+REMARK    9  A    between atoms: C8_15  and  C9_17 
+REMARK   10  A    between atoms: O8_16  and  C2_30 
+REMARK   11  A    between atoms: C9_17  and  O9_18 
+REMARK   12  A    between atoms: C1_27  and  C2_30 
+REMARK   13  A    between atoms: C4_32  and  O4_33 
+REMARK   14  A    between atoms: C5_34  and  N5_35 
+REMARK       I    between atoms: C10_44  and  N5_35 
+REMARK   15  A    between atoms: C6_36  and  C7_38 
+REMARK   16  A    between atoms: C7_38  and  O7_39 
+REMARK   17  A    between atoms: C7_38  and  C8_40 
+REMARK   18  A    between atoms: C8_40  and  O8_41 
+REMARK   19  A    between atoms: C8_40  and  C9_42 
+REMARK   20  A    between atoms: C9_42  and  O9_43 
+ROOT
+HETATM    1  O8  SIA H   1      72.178  67.919  84.761  1.00  0.00    -0.336 OA
+ENDROOT
+BRANCH   1   2
+HETATM    2  C8  SIA H   1      70.946  68.343  84.137  1.00  0.00     0.180 C 
+BRANCH   2   3
+HETATM    3  C7  SIA H   1      71.307  69.106  82.819  1.00  0.00     0.180 C 
+BRANCH   3   4
+HETATM    4  C6  SIA H   1      70.103  69.358  81.918  1.00  0.00     0.182 C 
+HETATM    5  C5  SIA H   1      70.397  70.473  80.929  1.00  0.00     0.145 C 
+HETATM    6  C4  SIA H   1      69.150  70.683  79.968  1.00  0.00     0.149 C 
+HETATM    7  C3  SIA H   1      68.360  69.357  79.579  1.00  0.00     0.114 C 
+HETATM    8  C2  SIA H   1      68.464  68.192  80.651  1.00  0.00     0.256 C 
+HETATM    9  O6  SIA H   1      69.837  68.167  81.081  1.00  0.00    -0.336 OA
+BRANCH   5  10
+HETATM   10  N5  SIA H   1      70.812  71.684  81.701  1.00  0.00    -0.352 N 
+HETATM   11  C10 SIA H   1      71.940  72.360  81.413  1.00  0.00     0.214 C 
+HETATM   12  O10 SIA H   1      72.735  72.072  80.501  1.00  0.00    -0.274 OA
+HETATM   13  C11 SIA H   1      72.177  73.573  82.306  1.00  0.00     0.117 C 
+HETATM   14  HN5 SIA H   1      70.229  72.005  82.460  1.00  0.00     0.163 HD
+ENDBRANCH   5  10
+BRANCH   6  15
+HETATM   15  O4  SIA H   1      69.531  71.415  78.751  1.00  0.00    -0.393 OA
+HETATM   16  HO4 SIA H   1      70.095  70.859  78.207  1.00  0.00     0.210 HD
+ENDBRANCH   6  15
+BRANCH   8  17
+HETATM   17  C1  SIA H   1      67.570  68.425  81.896  1.00  0.00     0.238 C 
+HETATM   18  O1B SIA H   1      67.496  67.539  82.763  1.00  0.00    -0.644 OA
+HETATM   19  O1A SIA H   1      66.935  69.479  82.047  1.00  0.00    -0.644 OA
+ENDBRANCH   8  17
+BRANCH   8  20
+HETATM   20  O2  SIA H   1      68.091  66.864  80.145  1.00  0.00    -0.357 OA
+HETATM   21  H2  SIA H   1      68.615  66.659  79.367  1.00  0.00     0.213 HD
+ENDBRANCH   8  20
+ENDBRANCH   3   4
+BRANCH   3  22
+HETATM   22  O7  SIA H   1      72.284  68.380  82.027  1.00  0.00    -0.390 OA
+HETATM   23  HO7 SIA H   1      73.061  68.202  82.562  1.00  0.00     0.210 HD
+ENDBRANCH   3  22
+ENDBRANCH   2   3
+BRANCH   2  24
+HETATM   24  C9  SIA H   1      70.044  67.095  83.920  1.00  0.00     0.198 C 
+BRANCH  24  25
+HETATM   25  O9  SIA H   1      70.592  65.946  84.580  1.00  0.00    -0.398 OA
+HETATM   26  HO9 SIA H   1      70.750  66.152  85.504  1.00  0.00     0.209 HD
+ENDBRANCH  24  25
+ENDBRANCH   2  24
+ENDBRANCH   1   2
+BRANCH   1  27
+HETATM   27  C2  SIA H   2      72.230  68.182  86.163  1.00  0.00     0.259 C 
+HETATM   28  C3  SIA H   2      73.544  67.549  86.647  1.00  0.00     0.114 C 
+HETATM   29  C4  SIA H   2      73.608  67.698  88.178  1.00  0.00     0.149 C 
+HETATM   30  C5  SIA H   2      72.302  67.181  88.842  1.00  0.00     0.145 C 
+HETATM   31  C6  SIA H   2      71.039  67.928  88.366  1.00  0.00     0.182 C 
+HETATM   32  O6  SIA H   2      71.051  67.626  86.933  1.00  0.00    -0.336 OA
+BRANCH  27  33
+HETATM   33  C1  SIA H   2      72.292  69.687  86.279  1.00  0.00     0.239 C 
+HETATM   34  O1A SIA H   2      72.799  70.338  85.385  1.00  0.00    -0.644 OA
+HETATM   35  O1B SIA H   2      71.851  70.264  87.252  1.00  0.00    -0.644 OA
+ENDBRANCH  27  33
+BRANCH  29  36
+HETATM   36  O4  SIA H   2      74.754  66.988  88.676  1.00  0.00    -0.393 OA
+HETATM   37  HO4 SIA H   2      74.797  67.078  89.631  1.00  0.00     0.210 HD
+ENDBRANCH  29  36
+BRANCH  30  38
+HETATM   38  N5  SIA H   2      72.427  67.250  90.312  1.00  0.00    -0.352 N 
+HETATM   39  C10 SIA H   2      72.775  66.198  91.038  1.00  0.00     0.214 C 
+HETATM   40  O10 SIA H   2      73.012  65.067  90.571  1.00  0.00    -0.274 OA
+HETATM   41  C11 SIA H   2      72.862  66.528  92.532  1.00  0.00     0.117 C 
+HETATM   42  HN5 SIA H   2      72.241  68.127  90.778  1.00  0.00     0.163 HD
+ENDBRANCH  30  38
+BRANCH  31  43
+HETATM   43  C7  SIA H   2      69.799  67.441  89.180  1.00  0.00     0.180 C 
+BRANCH  43  44
+HETATM   44  O7  SIA H   2      70.006  66.064  89.546  1.00  0.00    -0.390 OA
+HETATM   45  HO7 SIA H   2      70.371  65.585  88.799  1.00  0.00     0.210 HD
+ENDBRANCH  43  44
+BRANCH  43  46
+HETATM   46  C8  SIA H   2      68.423  67.502  88.466  1.00  0.00     0.173 C 
+BRANCH  46  47
+HETATM   47  O8  SIA H   2      68.320  68.652  87.615  1.00  0.00    -0.391 OA
+HETATM   48  HO8 SIA H   2      68.985  68.600  86.924  1.00  0.00     0.210 HD
+ENDBRANCH  46  47
+BRANCH  46  49
+HETATM   49  C9  SIA H   2      67.223  67.412  89.479  1.00  0.00     0.198 C 
+BRANCH  49  50
+HETATM   50  O9  SIA H   2      67.044  68.614  90.293  1.00  0.00    -0.398 OA
+HETATM   51  HO9 SIA H   2      66.298  68.491  90.886  1.00  0.00     0.209 HD
+ENDBRANCH  49  50
+ENDBRANCH  46  49
+ENDBRANCH  43  46
+ENDBRANCH  31  43
+ENDBRANCH   1  27
+TORSDOF 20
