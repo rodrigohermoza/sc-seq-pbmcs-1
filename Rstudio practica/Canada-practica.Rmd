@@ -1,0 +1,180 @@
+---
+title: "Canada-practica"
+author: "Rodrigo_Hermoza"
+date: "12/18/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+Empezando la practica de R-studio
+
+```{r}
+install.packages("palmerpenguins")
+install.packages("tidyverse")
+
+library("palmerpenguins")
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+summary(penguins)
+```
+
+```{r}
+ggplot(data = penguins, aes(x=flipper_length_mm, y=body_mass_g))+geom_point(aes(color=species))
+```
+
+In programming, a data structure is a format for organizing and storing data. Data structures are important to understand because you will work with them frequently when you use R for data analysis. The most common data structures in the R programming language include: 
+
+Vectors: is a group of data elements of the same type, stored in a sequence in R. You cannot have a vector that contains both logicals and numerics. 
+
+Data frames: is a collection of columns–similar to a spreadsheet or SQL table. Each column has a name at the top that represents a variable, and includes one observation per row. Data frames help summarize data and organize it into a format that is easy to read and use. 
+
+Matrices
+
+Arrays
+
+Creating (atomic) vectors:
+```{r}
+v1<- c(1, 2)
+v2<- c(2L, 3L, 4L)
+names1<- c("LISA", "MARK", "JOHN")
+typeof(v1)
+length(v2)
+length("MAMI")
+is.character(names1)
+#En la siguientes lineas, creo un vector pero con names() el primer elemento se llama a, el segundo b y el tercero c.
+x<- c(1,2,3)
+names(x)<-c("a","b","c")
+```
+Creating lists(still a vector):
+```{r}
+#Las listas pueden tener diferentes tipos de elementos dentro, así como otras listas.
+list("a", 1L, 1.5, TRUE)
+list(list(list(1 , 3, 5)))
+#Para saber que tiene una lista, se puede usar la función str() 
+str(list("a", 1L, 1.5,"b", TRUE))
+z <- list(list(list(1 , 3, 5)))
+str(z)
+#Se pueden nombrar los elementos de las listas
+list('Chicago' = 1, 'New York' = 2, 'Los Angeles' = 3)
+
+```
+
+Dates:
+```{r}
+#Las letras representan year, month, day, hour, minute o second y le dice a R en que orden guardar los datos de las fechas.
+ymd("2021-01-20")
+mdy("January 20th, 2021")
+dmy("20-Jan-2021")
+ymd(20210120)
+ymd_hms("2021-01-20 20:11:59")
+```
+
+Data frames
+
+```{r}
+data.frame(x = c(1, 2, 3) , y = c(1.5, 5.5, 7.5))
+```
+
+Operators
+
+Logical operators return a logical data type such as TRUE or FALSE. 
+AND (sometimes represented as & or && in R)
+
+OR (sometimes represented as | or || in R)
+
+NOT (!)
+
+if() 
+
+else()
+
+else if()
+
+```{r}
+#The AND operator takes two logical values. It returns TRUE only if both individual values are TRUE. This means that TRUE & TRUE evaluates to TRUE
+
+TRUE & TRUE
+TRUE&FALSE
+
+x <- 10
+x > 3 & x < 12
+
+#The OR operator (|) works in a similar way to the AND operator (&). The main difference is that at least one of the values of the OR operation must be TRUE for the entire OR operation to evaluate to TRUE.
+
+TRUE | FALSE
+TRUE|TRUE
+
+#The NOT operator (!) simply negates the logical value it applies to. In other words, !TRUE evaluates to FALSE, and !FALSE evaluates to TRUE.
+!TRUE
+!FALSE
+#En la siguiente linea, not evalua a un numero que al ser diferente de cero es true; por lo que sale false
+!x
+
+#The if statement sets a condition, and if the condition evaluates to TRUE, the R code associated with the if statement is executed.
+x <- 4
+if (x > 0) {
+
+  print("x is a positive number")
+
+}
+#The else statement is used in combination with an if statement. This is how the code is structured in R
+
+x <- 7
+
+if(x>0){
+  print( "x is a positive number")
+} else {
+  print ("x is either a negative number or zero")
+}
+
+#In some cases, you might want to customize your conditional statement even further by adding the else if statement. The else if statement comes in between the if statement and the else statement. This is the code structure: 
+
+x <- 0
+
+if(x>0){
+  print( "x is a positive number")
+} else if (0>x){
+  print ("x is a negative number ")
+} else{
+  print("x is zero")
+}
+
+```
+
+Pipes:
+A tool in R for expressing a sequence of multiple operations, represented with "%>%"
+
+```{r}
+data("ToothGrowth")
+```
+
+
+
