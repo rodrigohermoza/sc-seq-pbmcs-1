@@ -1,0 +1,107 @@
+---
+title: "DE_jolla"
+author: "Rodrigo_Hermoza"
+date: "1/19/2024"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(Seurat)
+library(vioplot)
+```
+
+
+Vamos a analizar la información sacada del Instituto La Jolla de California. Viene directamente de su pagina web DICE, para ser específico Vamos a la parte de búsqueda de genes y buscamos a ST8SIA4.
+
+El csv tiene 2470 columnas pero solo 20 filas, pero no todos los datos corresponden a las filas. A medida que se va avanzando en las columnas te das cuenta que la primera fila es la unica que tiene todos los datos completos hasta el final. De forma ascendente la dila más baja es la que primera que deja de tener datos en las columnas.
+```{r}
+dest_dir <- "/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/rstudio/diferential_expression_1/DE"
+ruta <- file.path(dest_dir, "ST8SIA4_Single_Cell_Expression_data.csv")
+
+# Lee el archivo sin interpretar la primera fila como encabezado
+jolla <- read.csv(ruta, header = FALSE, skip = 1)
+
+# Usa la primera columna como nombres de fila (cluster)
+rownames(jolla) <- jolla[, 1]
+
+# Elimina la primera columna (ya usada como nombres de fila)
+jolla <- jolla[, -1]
+
+# Transpone los datos para que las filas representen genes y las columnas representen células
+jolla <- t(jolla)
+
+```
+
+Plots para ST8SIA4:
+
+```{r}
+#Violin plot de la primera columna\
+
+#Columna
+n<-2
+
+vioplot(jolla[,n],
+        col = 2,             #Color del área
+        rectCol = "red",     #Color del rectángulo
+        lineCol = "white",   #Color de la línea
+        colMed = "green",    #Color del símbolo pch
+        border = "black",    #Color del borde del violín
+        pchMed = 16,         #Símbolo pch para la mediana
+        plotCentre = "points"#Si "line", dibuja una línea en la mediana
+)
+stripchart(jolla[,n], method = "jitter", col = "blue",
+           vertical = TRUE, pch = 19, add = TRUE)
+
+mean(jolla[,n], na.rm = TRUE)
+mean(jolla[,n] > 0, na.rm = TRUE) * 100
+min(jolla[,n], na.rm = TRUE)
+max(jolla[,n], na.rm = TRUE)
+median(jolla[,n], na.rm = TRUE)
+
+```
+
+
+Plots para GPR15:
+
+Tener en cuenta que la estructura para estos datos es la misma que la data para ST8SIA4 pero en la primera columna esta el cluster 12, luego de eso todo sigue en el orden correspondido.
+```{r}
+dest_dir <- "/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/rstudio/diferential_expression_1/DE"
+ruta <- file.path(dest_dir, "GPR15_Single_Cell_Expression_data.csv")
+
+# Lee el archivo sin interpretar la primera fila como encabezado
+jolla_15 <- read.csv(ruta, header = FALSE, skip = 1)
+
+# Usa la primera columna como nombres de fila (cluster)
+rownames(jolla_15) <- jolla_15[, 1]
+
+# Elimina la primera columna (ya usada como nombres de fila)
+jolla_15 <- jolla_15[, -1]
+
+# Transpone los datos para que las filas representen genes y las columnas representen células
+jolla_15 <- t(jolla_15)
+```
+
+```{r}
+#Violin plot de la primera columna\
+#Columna
+n<-13
+vioplot(jolla_15[,n],
+        col = 2,             #Color del área
+        rectCol = "red",     #Color del rectángulo
+        lineCol = "white",   #Color de la línea
+        colMed = "green",    #Color del símbolo pch
+        border = "black",    #Color del borde del violín
+        pchMed = 16,         #Símbolo pch para la mediana
+        plotCentre = "points"#Si "line", dibuja una línea en la mediana
+)
+stripchart(jolla[,n], method = "jitter", col = "blue",
+           vertical = TRUE, pch = 19, add = TRUE)
+
+mean(jolla_15[,n], na.rm = TRUE)
+mean(jolla_15[,n] > 0, na.rm = TRUE) * 100
+min(jolla_15[,n], na.rm = TRUE)
+max(jolla_15[,n], na.rm = TRUE)
+median(jolla_15[,n], na.rm = TRUE)
+```
+
