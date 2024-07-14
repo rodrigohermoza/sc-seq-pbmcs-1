@@ -1,0 +1,196 @@
+---
+title: "intento2"
+author: "Rodrigo_Hermoza"
+date: "1/2/2024"
+output: html_document
+---
+
+```{r}
+install.packages(c("tsne","pheatmap","MASS","cluster","mclust","flexmix","lattice","fpc","RColorBrewer","permute","amap","locfit"))
+```
+
+```{r}
+install.packages("RaceID")
+```
+
+```{r}
+library(RaceID)
+```
+
+#Download the data
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("DESeq2")
+
+library(DESeq2)
+
+download_and_read <- function(url, dest_file) {
+  download.file(url, dest_file, mode = "wb")
+  data <- read.table(gzfile(dest_file), header = TRUE, stringsAsFactors = FALSE)
+  return(data)
+}
+
+files_to_download <- c(
+  "GSE62270_96BC.txt.gz",
+  "GSE62270_data_counts_IOLEN2q0.txt.gz",
+  "GSE62270_data_counts_Lgr5.txt.gz",
+  "GSE62270_data_counts_Lgr5SC.txt.gz",
+  "GSE62270_data_counts_PSANNAq0.txt.gz",
+  "GSE62270_data_counts_Reg4_positive_cells_Replicate_1.txt.gz",
+  "GSE62270_data_counts_Reg4_positive_cells_Replicate_2.txt.gz",
+  "GSE62270_data_counts_Whole_Organoid_Replicate_1.txt.gz",
+  "GSE62270_data_counts_Whole_Organoid_Replicate_2.txt.gz",
+  "GSE62270_data_counts_YFPpos.txt.gz"
+)
+
+```
+
+Check the directory
+```{r}
+dest_dir <- "/Users/rodrigohermoza/Desktop/UTEC/2024-0/PoliSia/rstudio/scrna-seq-2-reproduction/nature14966-s9"
+```
+
+```{r}
+for (file in files_to_download) {
+  url <- paste0("https://ftp.ncbi.nlm.nih.gov/geo/series/GSE62nnn/GSE62270/suppl/", file)
+  dest_file <- file.path(dest_dir, file)
+  data <- download_and_read(url, dest_file)
+  
+  
+  print(head(data))
+  
+}
+```
+
+
+Now we have to do the analysis, just in case lets make a copy
+
+```{r}
+data_copy<-data
+```
+
+
+## input data
+
+```{r}
+rownames(data) <- data$GENEID
+# prdata: data.frame with transcript counts for all genes (rows) in all cells (columns); with rownames == gene ids; remove ERCC spike-ins 
+prdata <- data[grep("ERCC",rownames(data),invert=TRUE),-1]
+```
+
+## RaceID
+```{r}
+# initialize SCseq object with transcript counts
+sc <- SCseq(prdata)
+# filtering of expression data
+sc <- filterdata(sc, mintotal=3000, minexpr=5, minnumber=1)
+
+sc <- compdist(sc)
+
+sc <- clustexp(sc, clustnr=20, bootnr=50, cln=0,rseed=17000)
+# compute t-SNE map
+sc <- comptsne(sc,rseed=15555)
+# detect outliers and redefine clusters
+sc <- findoutliers(sc, outminc=5,outlg=2,probthr=1e-3, outdistquant=.75)
+
+```
+
+
+## diagnostic plots
+# gap statistics
+# silhouette of k-means clusters
+```{r}
+plotsilhouette(sc)
+```
+# Jaccard's similarity of k-means clusters
+```{r}
+plotjaccard(sc)
+```
+# barchart of outlier probabilities
+```{r}
+plotoutlierprobs(sc)
+```
+# regression of background model
+```{r}
+plotbackground(sc)
+```
+# dependence of outlier number on probability threshold (probthr)
+```{r}
+plotsensitivity(sc)
+```
+# heatmap of k-means cluster
+
+```{r}
+clustheatmap(sc,final=FALSE,hmethod="single")
+```
+
+# heatmap of final cluster
+```{r}
+clustheatmap(sc,final=TRUE,hmethod="single")
+```
+
+# highlight k-means clusters in t-SNE map
+```{r}
+sc1 <- comptsne(sc,rseed=15555)
+```
+
+# highlight k-means clusters in t-SNE map
+plottsne(sc,final=FALSE)
+# highlight final clusters in t-SNE map
+plottsne(sc,final=TRUE)
+
+no pude replicarlo
+
+# highlight cell labels in t-SNE map
+```{r}
+plotlabelsmap(sc, labels=names(sc@ndata))
+```
+
+# highlight groups of cells by symbols in t-SNE map
+
+```{r}
+#plotsymbolsmap (sc, types )
+```
+no lo pude hacer
+
+
+# highlight transcirpt counts of a set of genes in t-SNE map, e. g. all Apoa genes
+```{r}
+g <- c("Apoa1__chr9", "Apoa1bp__chr3", "Apoa2__chr1", "Apoa4__chr9", "Apoa5__chr9")
+plotexpmap (sc,g,n="Apoa genes",logsc=TRUE)
+```
+
+
+## identification of marker genes
+# differentially regulated genes in each cluster compared to the full ensemble
+
+```{r}
+cdiff <- clustdiffgenes(sc,1,pvalue=.01)
+```
+
+## write results to text files
+# final clusters 
+no pude replicarlo
+```{r}
+#x <- data.frame(CELLID=names(sc@cpart),cluster=sc@cpart)
+#write.table(x[order(x$cluster,decreasing=FALSE),],"cell_clust.xls",row.names=FALSE,col.names=TRUE,sep="\t",quote=FALSE)
+```
+
+# differentially expressed genes in cluster
+```{r}
+for ( n in names(cdiff) ) write.table(data.frame(GENEID=rownames(cdiff[[n]]),cdiff[[n]]),paste(paste("cell_clust_diff_genes",sub("\\.","\\_",n),sep="_"),".xls",sep=""),row.names=FALSE,col.names=TRUE,sep="\t",quote=FALSE)
+```
+# differentially expressed genes between two sets of clusters, e. g. cluster 1 and clusters 2,3
+```{r}
+d <- diffgenes(sc,cl1=1,cl2=c(2,3),mincount=5)
+plotdiffgenes(d,gene=names(d$z)[1])
+```
+
+
+
+
+
+
+
